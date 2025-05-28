@@ -1,0 +1,11 @@
+/home/ink/Code/FtpServer/build/CMakeFiles/edit_cache.dir
+/home/ink/Code/FtpServer/build/CMakeFiles/rebuild_cache.dir
+/home/ink/Code/FtpServer/build/netlib/CMakeFiles/netlib.dir
+/home/ink/Code/FtpServer/build/netlib/CMakeFiles/edit_cache.dir
+/home/ink/Code/FtpServer/build/netlib/CMakeFiles/rebuild_cache.dir
+/home/ink/Code/FtpServer/build/client/CMakeFiles/client.dir
+/home/ink/Code/FtpServer/build/client/CMakeFiles/edit_cache.dir
+/home/ink/Code/FtpServer/build/client/CMakeFiles/rebuild_cache.dir
+/home/ink/Code/FtpServer/build/server/CMakeFiles/server.dir
+/home/ink/Code/FtpServer/build/server/CMakeFiles/edit_cache.dir
+/home/ink/Code/FtpServer/build/server/CMakeFiles/rebuild_cache.dir
