@@ -98,7 +98,7 @@ void FtpClient::downloadFile(const std::filesystem::path fileDir, const std::str
   
   int n = -1;
 
-  while (n > 0) {
+  while (true) {
     std::vector<char> buff;
     buff.resize(1024);
 

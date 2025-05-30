@@ -173,6 +173,7 @@ void FtpServer::onReceive(const std::string & dir , const std::string & fileName
     }
     file.write(buff.data(),n);
   }
+  close(dataSocket);
 }
 
 void FtpServer::onSend(const std::string & dir , const std::string & fileName, const TcpConnectionPtr & conn,const int dataListenSockfd) {
