@@ -15,7 +15,13 @@ public:
 
   void downloadFile(const std::filesystem::path, const std::string &remoteDir , const std::string &filename);
 
+  void getDataSock();
+
   void safeSend(const std::string & message);
+
+  void controller();
+
+  void help();
 
   std::string safeRecv();
 
@@ -24,4 +30,8 @@ public:
 private:
   Socket controlSocket_;
   InetAddress serverAddr_;
+
+  int dataSockFd_;
+
+  bool isConnected_ = false;
 };

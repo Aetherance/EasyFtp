@@ -8,7 +8,7 @@
       "name": "(gdb) 启动",
       "type": "cppdbg",
       "request": "launch",
-      "program": "/home/ink/Code/FtpServer/build/bin/server",
+      "program": "/home/ink/Code/FtpServer/build/bin/client",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${fileDirname}",

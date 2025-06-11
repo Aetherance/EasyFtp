@@ -5,6 +5,9 @@
 #include"fcntl.h"
 #include<filesystem>
 
+#define FTP_CONNECTED "\033[32mFtp\033[0m"
+#define FTP_DISCONNECTED "Ftp"
+
 FtpClient::FtpClient() : controlSocket_(::socket(AF_INET,SOCK_STREAM,0)),
                          serverAddr_(InetAddress("localhost", 6060))
 {
@@ -26,19 +29,6 @@ void FtpClient::uploadFile(const std::string &filePath, const std::string &remot
   info.set_user_dir(remoteDir);
 
   safeSend(info.SerializeAsString());
-
-  std::string backMessage = safeRecv();
-
-  fileInfo backInfo;
-  backInfo.ParseFromString(backMessage);
-
-  Socket dataSocket(::socket(AF_INET,SOCK_STREAM,0));
-  InetAddress PeerAddr("localhost",backInfo.port());
-  sockaddr_in sin = PeerAddr.getSockAddr();
-  int stat = ::connect(dataSocket.fd(),(sockaddr*)&sin,sizeof(sin));
-  if(stat < 0) {
-    perror("::conncect");
-  }
  
   int fd = ::open(filePath.data(),O_RDONLY);
   
@@ -52,8 +42,13 @@ void FtpClient::uploadFile(const std::string &filePath, const std::string &remot
       break;
     }
 
-    ::send(dataSocket.fd(),buff.data(),n,0);
+    ::send(dataSockFd_,buff.data(),n,0);
   }
+
+  ::close(fd);
+  ::close(dataSockFd_);
+
+  isConnected_ = false;
 }
 
 void FtpClient::safeSend(const std::string & message) {
@@ -81,19 +76,6 @@ void FtpClient::downloadFile(const std::filesystem::path fileDir, const std::str
 
   safeSend(info.SerializeAsString());
 
-  std::string backMessage = safeRecv();
-
-  fileInfo backInfo;
-  backInfo.ParseFromString(backMessage);
-
-  Socket dataSocket(::socket(AF_INET,SOCK_STREAM,0));
-  InetAddress PeerAddr("localhost",backInfo.port());
-  sockaddr_in sin = PeerAddr.getSockAddr();
-  int stat = ::connect(dataSocket.fd(),(sockaddr*)&sin,sizeof(sin));
-  if(stat < 0) {
-    perror("::conncect");
-  }
-
   int fd = ::open(filePath.data(),O_WRONLY | O_CREAT | O_TRUNC,0644);
   
   int n = -1;
@@ -102,7 +84,7 @@ void FtpClient::downloadFile(const std::filesystem::path fileDir, const std::str
     std::vector<char> buff;
     buff.resize(1024);
 
-    n = ::recv(dataSocket.fd(),buff.data(),1024,0);
+    n = ::recv(dataSockFd_,buff.data(),1024,0);
 
     if(n <= 0) {
       break;
@@ -110,4 +92,83 @@ void FtpClient::downloadFile(const std::filesystem::path fileDir, const std::str
 
     ::write(fd,buff.data(),n);
   }
+
+  ::close(fd);
+  ::close(dataSockFd_);
+
+  isConnected_ = false;
+}
+
+void FtpClient::getDataSock() {
+  fileInfo info;
+  info.set_action("CONNECT");
+
+  safeSend(info.SerializeAsString());
+
+  std::string back = safeRecv();
+
+  fileInfo backInfo;
+  backInfo.ParseFromString(back);
+
+  int dataSockFd = ::socket(AF_INET,SOCK_STREAM,0);
+  InetAddress PeerAddr("localhost",backInfo.port());
+  sockaddr_in sin = PeerAddr.getSockAddr();
+  int stat = ::connect(dataSockFd,(sockaddr*)&sin,sizeof(sin));
+  if(stat < 0) {
+    perror("::conncect");
+  }
+
+  dataSockFd_ = dataSockFd;
+  isConnected_ = true;
+}
+
+std::vector<std::string> split(const std::string s,char ch)
+{
+  std::vector<std::string>result;
+  int pos = 0;
+  while (s[pos]==ch) {
+    pos++;
+  }
+    
+  while (pos< s.size()) {
+    int n = 0;
+    while (s[pos+n]!=ch&&pos+n<s.size()) {
+      n++;
+    }
+    result.push_back(s.substr(pos,n));
+    pos += n;
+    while (s[pos] ==ch&&pos<s.size()) {
+      pos++;
+    }
+  }
+  return result;
+}
+
+
+void FtpClient::controller() {
+  std::cout<<"输入 help 获取帮助\n";
+  std::string cmd;
+  while (true) {
+    std::cout<< ( isConnected_ ? FTP_CONNECTED : FTP_DISCONNECTED ) <<": ";
+    std::getline(std::cin,cmd);
+    std::vector<std::string> cmds = split(cmd,' ');
+    if(cmds[0] == "help") {
+      help();
+    } else if(cmds[0] == "pasv") {
+      getDataSock();
+    } else if(cmds[0] == "upload" && cmds.size() >= 4) {
+      uploadFile(cmds[1],cmds[2],cmds[3]);
+    } else if(cmds[0] == "download" && cmds.size() >= 4) {
+      downloadFile(cmds[1],cmds[2],cmds[3]);
+    } else if(cmds[0] == "exit") {
+      break;
+    }
+  }
+}
+
+void FtpClient::help() {
+  std::cout<<"输入 pasv 建立主动连接\n";
+  std::cout<<"输入 upload <文件路径> <远程目录> <文件名> 上传文件\n";
+  std::cout<<"输入 download <本地目录> <远程目录> <文件名> 下载文件\n";
+  std::cout<<"输入 exit 退出\n";
 }

@@ -1,5 +1,6 @@
 #include"server.h"
 #include"fileInfo.pb.h"
+#include"fcntl.h"
 
 #define TCP_HEAD_LEN sizeof(uint32_t)
 
@@ -71,7 +72,10 @@ void FtpServer::parseMessage(const std::string & msg, const TcpConnectionPtr & c
     handleUpload(info.file_name(), info.user_dir(), conn);
   } else if (info.action() == "DOWNLOAD") {
     handleDownload(info.file_name(), info.user_dir(), conn);
-  } else {
+  } else if(info.action() == "CONNECT") {
+    newDataFd(conn);
+  }
+  else {
     LOG_ERROR("Unknown action: " + info.action());
     sendResponse("ERROR: Unknown action", conn);
   }
@@ -96,17 +100,10 @@ unsigned int bindUsable(int sockfd) {
 void FtpServer::handleUpload(const std::string & fileName, const std::string & userDir, const TcpConnectionPtr & conn) {
   LOG_INFO("Received upload request for file: " + fileName + " in directory: " + userDir);
   
-  int dataSockfd = ::socket(AF_INET,SOCK_STREAM,0);
-  unsigned int port = bindUsable(dataSockfd);
+  int dataSock = dataFdMap_[conn->fd()];
 
-  std::thread receiveThread([=](){ onReceive(userDir,fileName,conn,dataSockfd); });
+  std::thread receiveThread([=](){ onReceive(userDir,fileName,conn,dataSock); });
   receiveThread.detach();
-
-  fileInfo backInfo;
-  backInfo.set_action("OK");
-  backInfo.set_port(port);
-
-  sendResponse(backInfo.SerializeAsString(), conn);
 }
 
 void FtpServer::handleDownload(const std::string & fileName, const std::string & userDir, const TcpConnectionPtr & conn) {
@@ -120,17 +117,10 @@ void FtpServer::handleDownload(const std::string & fileName, const std::string &
     return;
   }
 
-  int dataSockfd = ::socket(AF_INET,SOCK_STREAM,0);
-  unsigned int port = bindUsable(dataSockfd);
+  int dataSock = dataFdMap_[conn->fd()];
 
-  std::thread receiveThread([=](){ onSend(userDir,fileName,conn,dataSockfd); });
+  std::thread receiveThread([=](){ onSend(userDir,fileName,conn,dataSock); });
   receiveThread.detach();
-
-  fileInfo backInfo;
-  backInfo.set_action("OK");
-  backInfo.set_port(port);
-
-  sendResponse(backInfo.SerializeAsString(), conn);
 }
 
 void FtpServer::sendResponse(const std::string & Msg,const net::TcpConnectionPtr & conn) {
@@ -148,15 +138,16 @@ void FtpServer::sendResponse(const std::string & Msg,const net::TcpConnectionPtr
   conn->send(buffmsg);
 }
 
-void FtpServer::onReceive(const std::string & dir , const std::string & fileName, const TcpConnectionPtr & conn,const int dataListenSockfd) {
-  InetAddress peerAddr;
-  Socket dataListenSocket(dataListenSockfd);
-  dataListenSocket.listen();
-  int dataSocket = dataListenSocket.accept(&peerAddr);
-  if(dataSocket != -1) {
-    LOG_INFO_SUCCESS("The Client has connected to the data transport port\ntransport begin!");
-  }
+int setBlocking(int sockfd) {
+    int flags = fcntl(sockfd, F_GETFL, 0);
+    if (flags == -1) return -1; // 错误处理
 
+    flags &= ~O_NONBLOCK;
+
+    return fcntl(sockfd, F_SETFL, flags);
+}
+
+void FtpServer::onReceive(const std::string & dir , const std::string & fileName, const TcpConnectionPtr & conn,const int dataSocket) {
   std::filesystem::create_directory(root_/dir);
 
   std::ofstream file(root_/dir/fileName,std::ios::binary);
@@ -176,15 +167,7 @@ void FtpServer::onReceive(const std::string & dir , const std::string & fileName
   close(dataSocket);
 }
 
-void FtpServer::onSend(const std::string & dir , const std::string & fileName, const TcpConnectionPtr & conn,const int dataListenSockfd) {
-  InetAddress peerAddr;
-  Socket dataListenSocket(dataListenSockfd);
-  dataListenSocket.listen();
-  int dataSocket = dataListenSocket.accept(&peerAddr);
-  if(dataSocket != -1) {
-    LOG_INFO_SUCCESS("The Client has connected to the data transport port\ntransport begin!");
-  }
-
+void FtpServer::onSend(const std::string & dir , const std::string & fileName, const TcpConnectionPtr & conn,const int dataSocket) {
   std::filesystem::path filePath = root_ / dir / fileName;
 
   if (!std::filesystem::exists(filePath)) {
@@ -209,5 +192,31 @@ void FtpServer::onSend(const std::string & dir , const std::string & fileName, c
     if (bytesRead > 0) {
       ::send(dataSocket, buff.data(), bytesRead, 0);
     }
+  }
+  close(dataSocket);
+}
+
+void FtpServer::newDataFd(const TcpConnectionPtr & conn) {
+  int dataListenSockfd = ::socket(AF_INET,SOCK_STREAM,0);
+  unsigned int port = bindUsable(dataListenSockfd);
+  
+  InetAddress peerAddr;
+  Socket dataListenSocket(dataListenSockfd);
+  dataListenSocket.listen();
+
+  fileInfo backInfo;
+  backInfo.set_action("OK");
+  backInfo.set_port(port);
+
+  sendResponse(backInfo.SerializeAsString(), conn);
+  
+  int dataSocket = dataListenSocket.accept(&peerAddr);
+  
+  dataFdMap_[conn->fd()] = dataSocket;
+
+  setBlocking(dataSocket);
+
+  if(dataSocket != -1) {
+    LOG_INFO_SUCCESS("The Client has connected to the data transport port\ntransport begin!");
   }
 }

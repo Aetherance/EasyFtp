@@ -32,9 +32,13 @@ private:
 
   void onSend(const std::string & dir , const std::string & fileName, const TcpConnectionPtr & conn,const int sockfd);
 
+  void newDataFd(const TcpConnectionPtr & conn);
+
   InetAddress address_;
   TcpServer server_;
   EventLoop loop_;
 
   std::filesystem::path root_;
+
+  std::unordered_map<int,int> dataFdMap_;
 };
